@@ -1,0 +1,19 @@
+language: python
+
+dist: xenial
+
+python:
+    - 2.7
+    - 3.5
+    - 3.6
+    - 3.7
+    - 3.8
+
+install:
+    - git submodule update --init --recursive
+    - pip install .
+
+script: python -m unittest discover -v sunspec
+
+notifications:
+    email: false
