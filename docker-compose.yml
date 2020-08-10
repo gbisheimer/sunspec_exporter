@@ -1,0 +1,11 @@
+sunspec_exporter:
+    restart: always
+    image: sunspec_exporter
+    container_name: sunspec_exporter
+    ports:
+        - 8000:8080
+    environment:
+        - TARGET_IP=192.168.1.6
+        - TARGET_PORT=502
+        - LISTEN_PORT=8080
+        - SCRAPE_INTERVAL=1
