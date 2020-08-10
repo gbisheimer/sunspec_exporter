@@ -9,9 +9,7 @@ import os
 req_summary = prom.Summary('python_my_req_example', 'Time spent processing a request')
 SunSpecDevice = client.SunSpecClientDevice
 
-gauges = {
-    'inverter': {}
-}
+gauges = {}
 
 class GracefulKiller:
   kill_now = False
@@ -26,11 +24,14 @@ class GracefulKiller:
 # Decorate function with metric.
 @req_summary.time()
 def process_request():
-    SunSpecDevice.inverter.read()
+    # Read device status
+    SunSpecDevice.read()
     
-    # Update inverter parameters
-    for param in gauges['inverter']:
-        gauges['inverter'][param].set(SunSpecDevice.inverter[param] or 0)
+    # Update Gauges
+    for model in gauges:
+        for param in gauges[model]:
+            point = SunSpecDevice[model].model.points[param]
+            gauges[model][param].labels(model, point.point_type.units).set(SunSpecDevice[model][param] or 0)
 
 #################################################################
 # Main
@@ -78,32 +79,35 @@ if __name__ == '__main__':
         try:
             SunSpecDevice = client.SunSpecClientDevice(client.TCP, 1, ipaddr=target_addr, ipport=target_port)
             print("Connected to SunSpec target")
-
+            
             # Read device once to check capabilities
-            SunSpecDevice.inverter.read()
+            SunSpecDevice.read()
            
             # Get all available parameters in device and create a gauge for each one
-            for param in SunSpecDevice.inverter.model.points:
-                if not param in gauges['inverter']:
-                    point = SunSpecDevice.inverter.model.points[param]
-                    if SunSpecDevice.inverter[param] != None:
-                        gauge = prom.Gauge( name=param, \
-                            documentation=point.point_type.description, \
-                            unit=point.point_type.units )
-                        gauges['inverter'][param] = gauge         
+            for model in SunSpecDevice.models:
+                for param in SunSpecDevice.inverter.model.points:
+                    if not model in gauges:
+                        gauges[model] = {}
+                    if not param in gauges[model]:
+                        point = SunSpecDevice[model].model.points[param]
+                        if SunSpecDevice[model][param] != None:
+                            gauge = prom.Gauge( name=param, \
+                                documentation = point.point_type.description, \
+                                unit = point.point_type.units, \
+                                labelnames = ['model', 'unit'] )
+                            gauges[model][param] = gauge
 
-            while not killer.kill_now:
-                process_request()
-                time.sleep(scrape_interval)
+            try:
+                while not killer.kill_now:
+                    process_request()
+                    time.sleep(scrape_interval)
+            except Exception as e:
+                print(str(e))
+                SunSpecDevice.close()
+                print(date_time, "Closed connection to SunSpec server")
             
         except Exception as e:
             print(str(e))
-            try:
-                SunSpecDevice.close()
-                print(date_time, "Closed connection to SunSpec server")
-            except:
-                None
-
             time.sleep(1)
         
     try:
