@@ -34,11 +34,16 @@ def process_request():
                 point = SunSpecDevice[model].model.points[param]
                 value = SunSpecDevice[model][param]
                 unit = point.point_type.units
+                isNumeric = type(SunSpecDevice[model][param]) in [float, int]
+                hasUnit = type(unit) is str
                 try:
-                    if type(SunSpecDevice[model][param]) in [float, int]:
-                        metrics[param].labels(model, unit or '', '').set(value)
+                    if isNumeric:
+                        if hasUnit:
+                            metrics[param].labels(model, unit).set(value)
+                        else:
+                            metrics[param].labels(model).set(value)
                     else:
-                        metrics[param].labels(model, '', value or '').set(1)
+                        metrics[param].labels(model, value).set(1)
                 except Exception as e:
                     print(date_time, "Model:", model, "- Param:", param, "- Unit:", unit, "- Value:", value, "- Exception:", str(e))
             
@@ -102,13 +107,23 @@ if __name__ == '__main__':
                     for param in SunSpecDevice[model].model.points:
                         if not param in metrics:
                             point = SunSpecDevice[model].model.points[param]
+                            value = SunSpecDevice[model][param]
+                            unit = point.point_type.units
+                            isNumeric = type(SunSpecDevice[model][param]) in [float, int]
+                            hasUnit = type(unit) is str
                             if SunSpecDevice[model][param] != None:
                                 print(date_time, "Adding metric", param, "from model", model)
                                 try:
+                                    labels = ['model']
+                                    if isNumeric:
+                                        if hasUnit:
+                                            labels.append('unit')
+                                    else:
+                                        labels.append('value')
                                     gauge = prom.Gauge( name=param, \
                                         documentation = point.point_type.description or '', \
                                         unit = point.point_type.units or '', \
-                                        labelnames = ['model', 'unit', 'value'] )
+                                        labelnames = labels )
                                     metrics[param] = gauge
                                 except Exception as e:
                                     print(date_time, str(e))
