@@ -43,3 +43,5 @@ doc/sphinx/
 # Coverage.py files
 .coverage
 htmlcov
+
+.vscode
