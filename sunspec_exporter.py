@@ -9,7 +9,7 @@ import os
 req_summary = prom.Summary('python_my_req_example', 'Time spent processing a request')
 SunSpecDevice = client.SunSpecClientDevice
 
-gauges = {}
+metrics = {}
 
 class GracefulKiller:
   kill_now = False
@@ -28,10 +28,20 @@ def process_request():
     SunSpecDevice.read()
     
     # Update Gauges
-    for model in gauges:
-        for param in gauges[model]:
-            point = SunSpecDevice[model].model.points[param]
-            gauges[model][param].labels(model, point.point_type.units).set(SunSpecDevice[model][param] or 0)
+    for model in SunSpecDevice.models:
+        for param in SunSpecDevice[model].model.points:
+            if param in metrics:
+                point = SunSpecDevice[model].model.points[param]
+                value = SunSpecDevice[model][param]
+                unit = point.point_type.units
+                try:
+                    if type(SunSpecDevice[model][param]) in [float, int]:
+                        metrics[param].labels(model, unit or '', '').set(value)
+                    else:
+                        metrics[param].labels(model, '', value or '').set(1)
+                except Exception as e:
+                    print(date_time, "Model:", model, "- Param:", param, "- Unit:", unit, "- Value:", value, "- Exception:", str(e))
+            
 
 #################################################################
 # Main
@@ -60,15 +70,17 @@ if __name__ == '__main__':
     except:
         scrape_interval = 1
 
+    now = datetime.now() # current date and time
+    date_time = now.strftime("[%Y-%m-%d %H:%M:%S]")
     # Start up the server to expose the metrics.
-    print("Starting metrics server on port ", listen_port)
+    print(date_time, "Starting metrics server on port ", listen_port)
     try:
         prom.start_http_server(listen_port)
-        print("Metrics server started")
+        print(date_time, "Metrics server started")
     except Exception as e:
-        print(str(e))
+        print(date_time, str(e))
         exit()
-    
+
     # Main loop
     while not killer.kill_now:
         now = datetime.now() # current date and time
@@ -78,36 +90,40 @@ if __name__ == '__main__':
         print(date_time, "Connecting to SunSpec target on", target_addr, "port", target_port)
         try:
             SunSpecDevice = client.SunSpecClientDevice(client.TCP, 1, ipaddr=target_addr, ipport=target_port)
-            print("Connected to SunSpec target")
+            print(date_time, "Connected to SunSpec target")
             
-            # Read device once to check capabilities
-            SunSpecDevice.read()
-           
-            # Get all available parameters in device and create a gauge for each one
-            for model in SunSpecDevice.models:
-                for param in SunSpecDevice.inverter.model.points:
-                    if not model in gauges:
-                        gauges[model] = {}
-                    if not param in gauges[model]:
-                        point = SunSpecDevice[model].model.points[param]
-                        if SunSpecDevice[model][param] != None:
-                            gauge = prom.Gauge( name=param, \
-                                documentation = point.point_type.description, \
-                                unit = point.point_type.units, \
-                                labelnames = ['model', 'unit'] )
-                            gauges[model][param] = gauge
-
             try:
+                # Read device once to check capabilities
+                SunSpecDevice.read()
+            
+                # Get all available parameters in device and create a gauge for each one
+                print(date_time, "Available models in device:", SunSpecDevice.models)
+                for model in SunSpecDevice.models:
+                    for param in SunSpecDevice[model].model.points:
+                        if not param in metrics:
+                            point = SunSpecDevice[model].model.points[param]
+                            if SunSpecDevice[model][param] != None:
+                                print(date_time, "Adding metric", param, "from model", model)
+                                try:
+                                    gauge = prom.Gauge( name=param, \
+                                        documentation = point.point_type.description or '', \
+                                        unit = point.point_type.units or '', \
+                                        labelnames = ['model', 'unit', 'value'] )
+                                    metrics[param] = gauge
+                                except Exception as e:
+                                    print(date_time, str(e))
+
                 while not killer.kill_now:
                     process_request()
                     time.sleep(scrape_interval)
+
             except Exception as e:
-                print(str(e))
+                print(date_time, str(e))
                 SunSpecDevice.close()
                 print(date_time, "Closed connection to SunSpec server")
             
         except Exception as e:
-            print(str(e))
+            print(date_time, str(e))
             time.sleep(1)
         
     try:
