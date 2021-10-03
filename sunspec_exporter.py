@@ -122,7 +122,6 @@ if __name__ == '__main__':
                                         labels.append('value')
                                     gauge = prom.Gauge( name=param, \
                                         documentation = point.point_type.description or '', \
-                                        unit = point.point_type.units or '', \
                                         labelnames = labels )
                                     metrics[param] = gauge
                                 except Exception as e:
